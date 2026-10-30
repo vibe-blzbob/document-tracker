@@ -225,334 +225,113 @@ function initSchema(db: DatabaseSync) {
 function seedDefaultData(db: DatabaseSync) {
   const now = new Date().toISOString();
 
-  // Ensure municipal office accounts exist
+  // 1. Core Municipal Staff Accounts
   const insertUser = db.prepare(`
     INSERT OR IGNORE INTO users (id, name, role, department, pin_hash, created_at)
     VALUES (?, ?, ?, ?, ?, ?)
   `);
-
   insertUser.run('u-admin', 'System Administrator', 'Admin', 'City IT / Operations', hashPin('1234'), now);
   insertUser.run('u-mayor', "Hon. Mayor's Executive Staff", 'Approver', 'Office of the Mayor', hashPin('1111'), now);
   insertUser.run('u-records', 'Records Custodian', 'Officer', 'Records & Archives Management', hashPin('2222'), now);
-  insertUser.run('u-sanggunian', 'Sanggunian Secretary', 'Officer', 'Sangguniang Bayan / Panlungsod', hashPin('3333'), now);
-  insertUser.run('u-treasurer', 'City Treasurer Office', 'Auditor', 'City Treasurer', hashPin('4444'), now);
-  insertUser.run('u-bplo', 'BPLO Licensing Officer', 'Reviewer', 'Business Permits & Licensing Office (BPLO)', hashPin('5555'), now);
-  insertUser.run('u-engineer', 'City Building Official', 'Reviewer', 'City Engineering & Building Official', hashPin('6666'), now);
+  insertUser.run('u-accountant', 'City Accountant', 'Auditor', 'City Accounting Office', hashPin('3333'), now);
+  insertUser.run('u-treasurer', 'City Treasurer', 'Disbursing Officer', 'City Treasurer', hashPin('4444'), now);
 
-  // Seed default system dropdown lists if not present
+  // 2. Default System Dropdown Lists
   const insertDropdown = db.prepare(`
     INSERT OR IGNORE INTO system_dropdowns (key, label, options_json, updated_at)
     VALUES (?, ?, ?, ?)
   `);
   insertDropdown.run('offices', 'Municipal Offices & Departments', JSON.stringify(MUNICIPAL_OFFICES), now);
   insertDropdown.run('actions', 'Action Required Directives', JSON.stringify(ACTION_REQUIRED_OPTIONS), now);
-  insertDropdown.run('priorities', 'Priority Levels', JSON.stringify(['Low', 'Medium', 'High', 'Urgent']), now);
-  insertDropdown.run('origin_types', 'Origin Types', JSON.stringify(['Internal (LGU Office / Department)', 'External (Citizen / Agency / Business)']), now);
+  insertDropdown.run('priorities', 'Priority Levels', JSON.stringify(['Low', 'Normal', 'High', 'Urgent']), now);
+  insertDropdown.run('origin_types', 'Origin Types', JSON.stringify(['Internal Department', 'External / Citizen / Barangay']), now);
 
-  // Check if LGU templates exist
-  const hasLguTpl = (db.prepare("SELECT COUNT(*) as count FROM templates WHERE id = 'tpl-ordinance'").get() as any)?.count ?? 0;
-  if (hasLguTpl === 0) {
-    const insertTemplate = db.prepare(`
-      INSERT OR REPLACE INTO templates (id, name, description, icon, stages_json, fields_json, created_at)
+  // 3. One Complete Process Template: Disbursement Voucher and Financial Claim
+  const tplCount = (db.prepare('SELECT COUNT(*) as count FROM templates').get() as any)?.count ?? 0;
+  if (tplCount === 0) {
+    const dvStages = [
+      '1. Obligation Request (CAFOA)',
+      '2. City Accounting Pre-Audit',
+      '3. City Treasurer Cash Verification',
+      '4. Office of the Mayor Final Approval',
+      '5. Check Issued and Released to Payee'
+    ];
+    const dvFields: CustomFieldDefinition[] = [
+      { id: 'payee_name', name: 'Payee / Contractor Name', type: 'text', required: true },
+      { id: 'amount', name: 'Obligated Amount (PHP)', type: 'number', required: true },
+      {
+        id: 'fund_source',
+        name: 'Funding Source',
+        type: 'select',
+        required: true,
+        options: [
+          'General Fund (GF)',
+          '20% Local Development Fund (LDF)',
+          'Special Education Fund (SEF)',
+          'Local Disaster Risk Reduction Fund (LDRRMF)',
+          'Trust Fund (TF)'
+        ]
+      },
+      { id: 'dv_no', name: 'DV / Obligation Control No.', type: 'text', required: true },
+      { id: 'particulars', name: 'Particulars and Nature of Expense', type: 'text', required: true }
+    ];
+
+    db.prepare(`
+      INSERT INTO templates (id, name, description, icon, stages_json, fields_json, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    // 1. Sanggunian Ordinance & Resolution
-    insertTemplate.run(
-      'tpl-ordinance',
-      'Sanggunian Ordinance & Resolution',
-      'Legislative measures, city ordinances, resolutions, committee hearings, and executive transmittals.',
-      'Landmark',
-      JSON.stringify([
-        '1. First Reading (Referred to Committee)',
-        '2. Committee Hearing & Report',
-        '3. Second Reading (Debates & Amendments)',
-        '4. Third & Final Reading (Passed)',
-        '5. Transmitted to Mayor for Signature',
-        '6. Enacted & Published'
-      ]),
-      JSON.stringify([
-        {
-          id: 'ordinance_no',
-          name: 'Proposed Measure / Resolution #',
-          type: 'text',
-          required: true
-        },
-        {
-          id: 'proponent',
-          name: 'Principal Author / Councilor',
-          type: 'text',
-          required: true
-        },
-        {
-          id: 'committee',
-          name: 'Committee In-Charge',
-          type: 'select',
-          required: true,
-          options: [
-            'Committee on Laws, Rules & Internal Ethics',
-            'Committee on Appropriations & Budget',
-            'Committee on Infrastructure & Public Works',
-            'Committee on Health, Sanitation & Environment',
-            'Committee on Trade, Commerce & Industry',
-            'Committee on Barangay Affairs'
-          ]
-        },
-        {
-          id: 'session_date',
-          name: 'Regular Session Date',
-          type: 'date',
-          required: true
-        },
-        {
-          id: 'purpose_summary',
-          name: 'Legislative Intent & Title',
-          type: 'text',
-          required: true
-        }
-      ]),
-      now
-    );
-
-    // 2. Disbursement Voucher & Procurement (BAC)
-    insertTemplate.run(
+    `).run(
       'tpl-dv',
-      'Disbursement Voucher & BAC Procurement',
-      'Government fund disbursements, supplier purchase vouchers, obligation certifications, and check releases.',
+      'Disbursement Voucher (DV) & Financial Claim',
+      'End-to-end municipal financial disbursement lifecycle: obligation request, accounting pre-audit, treasury verification, Mayor approval, and check release.',
       'Receipt',
-      JSON.stringify([
-        '1. Obligation Request (CAFOA)',
-        '2. Budget Certification',
-        '3. Pre-Audit (Accounting Office)',
-        '4. Cash Availability (City Treasurer)',
-        '5. Office of the Mayor Approval',
-        '6. Check Prepared & Released'
-      ]),
-      JSON.stringify([
-        {
-          id: 'payee',
-          name: 'Payee / Contractor / Claimant',
-          type: 'text',
-          required: true
-        },
-        {
-          id: 'dv_number',
-          name: 'Disbursement Voucher Ref #',
-          type: 'text',
-          required: true
-        },
-        {
-          id: 'amount',
-          name: 'Total Net Amount (PHP)',
-          type: 'number',
-          required: true
-        },
-        {
-          id: 'fund_source',
-          name: 'Funding Source',
-          type: 'select',
-          required: true,
-          options: [
-            'General Fund (GF)',
-            'Special Education Fund (SEF)',
-            '20% Local Development Fund (LDF)',
-            'Local Disaster Risk Reduction Fund (LDRRMF)',
-            'Trust Fund (TF)'
-          ]
-        },
-        {
-          id: 'due_date',
-          name: 'Target Release Date',
-          type: 'date',
-          required: false
-        },
-        {
-          id: 'particulars',
-          name: 'Particulars & Nature of Expense',
-          type: 'text',
-          required: true
-        }
-      ]),
-      now
-    );
-
-    // 3. Business Permit & Licensing (BPLO)
-    insertTemplate.run(
-      'tpl-bplo',
-      "Mayor's Business Permit & Licensing (BPLO)",
-      'New business registration, annual renewals, fire & health clearances, tax assessments, and Mayor permit issuance.',
-      'Briefcase',
-      JSON.stringify([
-        '1. Application Filed & Verification',
-        '2. Zoning & Land Clearance',
-        '3. BFP Fire & City Health Inspection',
-        '4. Tax Assessment & Payment (Treasury)',
-        '5. Mayor Business Permit Released'
-      ]),
-      JSON.stringify([
-        {
-          id: 'business_name',
-          name: 'Registered Business Trade Name',
-          type: 'text',
-          required: true
-        },
-        {
-          id: 'owner_name',
-          name: 'Owner / Authorized Representative',
-          type: 'text',
-          required: true
-        },
-        {
-          id: 'tin_number',
-          name: 'Taxpayer Identification No. (TIN)',
-          type: 'text',
-          required: true
-        },
-        {
-          id: 'barangay',
-          name: 'Barangay Location',
-          type: 'text',
-          required: true
-        },
-        {
-          id: 'business_nature',
-          name: 'Line of Business',
-          type: 'select',
-          required: true,
-          options: [
-            'Retail & Commercial Merchandising',
-            'Food & Restaurant Services',
-            'Professional & Financial Services',
-            'Manufacturing & Industrial',
-            'Information Technology & BPO',
-            'Contracting & Construction Services'
-          ]
-        },
-        {
-          id: 'declared_capital',
-          name: 'Declared Capital / Gross Receipts (PHP)',
-          type: 'number',
-          required: true
-        }
-      ]),
-      now
-    );
-
-    // 4. Citizen Grievance & Public Assistance
-    insertTemplate.run(
-      'tpl-citizen',
-      'Citizen Grievance & Public Assistance',
-      'Constituent letters, financial/medical assistance requests, community petitions, and barangay referrals.',
-      'Users',
-      JSON.stringify([
-        '1. Ingested at Records / Helpdesk',
-        '2. Endorsed by Mayor / Administrator',
-        '3. Department Investigation & Action',
-        '4. Official Resolution Prepared',
-        '5. Transmitted to Constituent / Released'
-      ]),
-      JSON.stringify([
-        {
-          id: 'constituent_name',
-          name: 'Constituent / Requesting Party',
-          type: 'text',
-          required: true
-        },
-        {
-          id: 'contact_number',
-          name: 'Contact Number / Mobile',
-          type: 'text',
-          required: true
-        },
-        {
-          id: 'barangay_address',
-          name: 'Barangay / Residential Address',
-          type: 'text',
-          required: true
-        },
-        {
-          id: 'request_category',
-          name: 'Assistance / Grievance Category',
-          type: 'select',
-          required: true,
-          options: [
-            'Medical / Hospitalization Assistance',
-            'Social Welfare & Burial Assistance',
-            'Public Works / Road & Drainage Maintenance',
-            'Neighborhood & Boundary Dispute',
-            'Barangay Resolution Endorsement'
-          ]
-        },
-        {
-          id: 'narrative',
-          name: 'Summary of Request / Complaint',
-          type: 'text',
-          required: true
-        }
-      ]),
-      now
-    );
-
-    // 5. Building & Civil Engineering Clearance (OBO)
-    insertTemplate.run(
-      'tpl-building',
-      'Building & Civil Engineering Clearance (OBO)',
-      'Building permit applications, structural blueprints, zoning clearances, and occupancy certificate processing.',
-      'Layers',
-      JSON.stringify([
-        '1. Plans & Blueprints Submitted',
-        '2. Line & Grade / Zoning Verification',
-        '3. Structural, Electrical & Sanitary Audit',
-        '4. Order of Payment Assessment',
-        '5. Building Permit Released'
-      ]),
-      JSON.stringify([
-        {
-          id: 'project_name',
-          name: 'Building Project / Structure Name',
-          type: 'text',
-          required: true
-        },
-        {
-          id: 'applicant',
-          name: 'Applicant / Property Owner',
-          type: 'text',
-          required: true
-        },
-        {
-          id: 'lot_location',
-          name: 'Site Address (Lot / Block / Street)',
-          type: 'text',
-          required: true
-        },
-        {
-          id: 'survey_no',
-          name: 'TCT / Cadastral Survey No.',
-          type: 'text',
-          required: false
-        },
-        {
-          id: 'estimated_cost',
-          name: 'Estimated Project Cost (PHP)',
-          type: 'number',
-          required: true
-        }
-      ]),
+      JSON.stringify(dvStages),
+      JSON.stringify(dvFields),
       now
     );
   }
 
-  // Seed sample LGU documents if table is empty
+  // 4. One Complete Document Process with Full Audit Trail
   const docCount = (db.prepare('SELECT COUNT(*) as count FROM documents').get() as any)?.count ?? 0;
   if (docCount === 0) {
-    const insertDoc = db.prepare(`
+    const docId = 'doc-lgu-001';
+    const trackingCode = 'LGU-2026-0001';
+    const t0 = new Date(Date.now() - 3600000 * 24 * 3).toISOString();
+    const t1 = new Date(Date.now() - 3600000 * 24 * 2).toISOString();
+    const t2 = new Date(Date.now() - 3600000 * 24 * 1).toISOString();
+    const t3 = new Date(Date.now() - 3600000 * 12).toISOString();
+    const t4 = new Date(Date.now() - 3600000 * 2).toISOString();
+
+    db.prepare(`
       INSERT INTO documents (
         id, tracking_code, title, template_id, current_stage, priority,
         origin_type, originating_office, current_office, action_required,
         assignee_id, assignee_name, custom_values_json, created_by_name,
         created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
+    `).run(
+      docId,
+      trackingCode,
+      'Disbursement Voucher: Barangay Poblacion Farm-to-Market Road Concreting (Billing #2)',
+      'tpl-dv',
+      '5. Check Issued and Released to Payee',
+      'High',
+      'Internal Department',
+      'City Engineering & Building Official',
+      'City Treasurer',
+      'For Release to Constituent / Client',
+      'u-treasurer',
+      'City Treasurer',
+      JSON.stringify({
+        payee_name: 'Archon Builders & Infrastructure Corp.',
+        amount: 1450000,
+        fund_source: '20% Local Development Fund (LDF)',
+        dv_no: 'DV-2026-10-0489',
+        particulars: 'Full settlement of progress billing claim #2 for concreting of Barangay Poblacion farm-to-market access road.'
+      }),
+      'Records Custodian',
+      t0,
+      t4
+    );
 
     const insertHist = db.prepare(`
       INSERT INTO document_history (
@@ -560,170 +339,27 @@ function seedDefaultData(db: DatabaseSync) {
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
-    // Sample 1: Sanggunian Ordinance
-    insertDoc.run(
-      'doc-lgu-01',
-      'LGU-2026-0001',
-      'Draft Ordinance: Comprehensive Solid Waste Management and Plastic Reduction Act of 2026',
-      'tpl-ordinance',
-      '2. Committee Hearing & Report',
-      'High',
-      'Internal Department',
-      'Sangguniang Bayan / Panlungsod',
-      'Sangguniang Bayan / Panlungsod',
-      'For Committee Hearing & Deliberation',
-      'u-sanggunian',
-      'Sanggunian Secretary',
-      JSON.stringify({
-        ordinance_no: 'ORD-2026-014',
-        proponent: 'Hon. Councilor Angela Ramirez',
-        committee: 'Committee on Health, Sanitation & Environment',
-        session_date: '2026-10-20',
-        purpose_summary: 'Regulates single-use plastics and establishes barangay material recovery facilities (MRFs).'
-      }),
-      'Sanggunian Secretary',
-      now,
-      now
-    );
-
-    insertHist.run(
-      'hist-lgu-01a',
-      'doc-lgu-01',
-      'created',
-      null,
-      '1. First Reading (Referred to Committee)',
-      'Sangguniang Bayan / Panlungsod',
-      'Sangguniang Bayan / Panlungsod',
-      'For Committee Hearing & Deliberation',
-      'Sanggunian Secretary',
-      'Ordinance read on First Reading during 42nd Regular Session and referred to Committee on Environment.',
-      now
-    );
-
-    insertHist.run(
-      'hist-lgu-01b',
-      'doc-lgu-01',
-      'stage_changed',
-      '1. First Reading (Referred to Committee)',
-      '2. Committee Hearing & Report',
-      'Sangguniang Bayan / Panlungsod',
-      'Sangguniang Bayan / Panlungsod',
-      'For Committee Hearing & Deliberation',
-      'Sanggunian Secretary',
-      'Public hearing scheduled with Liga ng mga Barangay and local commerce chamber.',
-      now
-    );
-
-    // Sample 2: Disbursement Voucher
-    insertDoc.run(
-      'doc-lgu-02',
-      'LGU-2026-0002',
-      'Disbursement Voucher: Barangay San Isidro Multipurpose Evacuation Center Phase II',
-      'tpl-dv',
-      '3. Pre-Audit (Accounting Office)',
-      'Urgent',
-      'Internal Department',
-      'City Engineering & Building Official',
-      'City Accounting Office',
-      'For Legal Review & Opinion',
-      'u-records',
-      'Records Custodian',
-      JSON.stringify({
-        payee: 'Apex Builders & Civil Works Corp.',
-        dv_number: 'DV-2026-1089',
-        amount: 2850000.00,
-        fund_source: '20% Local Development Fund (LDF)',
-        due_date: '2026-11-05',
-        particulars: 'Progress billing (65% completion) for structural framing and roofing.'
-      }),
-      'City Building Official',
-      now,
-      now
-    );
-
-    insertHist.run(
-      'hist-lgu-02a',
-      'doc-lgu-02',
-      'created',
-      null,
-      '1. Obligation Request (CAFOA)',
-      'City Engineering & Building Official',
-      'City Budget Office',
-      'For Fund Certification & Budget Allocation',
-      'City Building Official',
-      'Obligation request submitted with engineering inspection report.',
-      now
-    );
-
-    insertHist.run(
-      'hist-lgu-02b',
-      'doc-lgu-02',
-      'routed',
-      '1. Obligation Request (CAFOA)',
-      '3. Pre-Audit (Accounting Office)',
-      'City Budget Office',
-      'City Accounting Office',
-      'For Legal Review & Opinion',
-      'Records Custodian',
-      'Fund certified available under 20% LDF. Transmitted to Accounting for pre-audit checklist.',
-      now
-    );
-
-    // Sample 3: Business Permit
-    insertDoc.run(
-      'doc-lgu-03',
-      'LGU-2026-0003',
-      'New Business Permit: GreenValley Fresh Agro-Trading & Distribution Center',
-      'tpl-bplo',
-      '4. Tax Assessment & Payment (Treasury)',
-      'Normal',
-      'External / Citizen / Barangay',
-      'GreenValley Agro-Trading Inc.',
-      'City Treasurer',
-      'For Assessment & Payment Processing',
-      'u-bplo',
-      'BPLO Licensing Officer',
-      JSON.stringify({
-        business_name: 'GreenValley Fresh Agro-Trading & Distribution',
-        owner_name: 'Roberto Valenzuela',
-        tin_number: '241-890-554-000',
-        barangay: 'Barangay San Pedro',
-        business_nature: 'Retail & Commercial Merchandising',
-        declared_capital: 750000.00
-      }),
-      'BPLO Licensing Officer',
-      now,
-      now
-    );
-
-    insertHist.run(
-      'hist-lgu-03a',
-      'doc-lgu-03',
-      'created',
-      null,
-      '1. Application Filed & Verification',
-      'Business Permits & Licensing Office (BPLO)',
-      'Business Permits & Licensing Office (BPLO)',
-      'For Assessment & Payment Processing',
-      'BPLO Licensing Officer',
-      'Initial application documents and DTI registration verified.',
-      now
-    );
-
-    insertHist.run(
-      'hist-lgu-03b',
-      'doc-lgu-03',
-      'routed',
-      '3. BFP Fire & City Health Inspection',
-      '4. Tax Assessment & Payment (Treasury)',
-      'Business Permits & Licensing Office (BPLO)',
-      'City Treasurer',
-      'For Assessment & Payment Processing',
-      'BPLO Licensing Officer',
-      'Zoning and Fire Safety inspections passed. Forwarded to Treasury for Order of Payment.',
-      now
-    );
+    insertHist.run('h-1', docId, 'created', null, '1. Obligation Request (CAFOA)', 'City Engineering & Building Official', 'City Engineering & Building Official', 'For Fund Certification & Budget Allocation', 'Records Custodian', 'Document registered and submitted with complete billing attachments and program of work.', t0);
+    insertHist.run('h-2', docId, 'routed', '1. Obligation Request (CAFOA)', '1. Obligation Request (CAFOA)', 'City Engineering & Building Official', 'City Accounting Office', 'For Legal Review & Opinion', 'Records Custodian', 'Forwarded to City Accounting Office for CAFOA budget allocation and pre-audit certification.', t0);
+    insertHist.run('h-3', docId, 'stage_changed', '1. Obligation Request (CAFOA)', '2. City Accounting Pre-Audit', 'City Accounting Office', 'City Accounting Office', 'For Fund Certification & Budget Allocation', 'City Accountant', 'All supporting procurement documents verified. CAFOA signed and certified against 20% LDF.', t1);
+    insertHist.run('h-4', docId, 'routed', '2. City Accounting Pre-Audit', '2. City Accounting Pre-Audit', 'City Accounting Office', 'Office of the Mayor', "For Mayor's Signature / Approval", 'City Accountant', 'Endorsed to Office of the Mayor for executive approval.', t1);
+    insertHist.run('h-5', docId, 'stage_changed', '2. City Accounting Pre-Audit', '3. City Treasurer Cash Verification', 'Office of the Mayor', 'Office of the Mayor', "For Mayor's Signature / Approval", "Hon. Mayor's Executive Staff", 'Cash availability confirmed. Awaiting final executive signing.', t2);
+    insertHist.run('h-6', docId, 'stage_changed', '3. City Treasurer Cash Verification', '4. Office of the Mayor Final Approval', 'Office of the Mayor', 'Office of the Mayor', "For Mayor's Signature / Approval", "Hon. Mayor's Executive Staff", 'Approved and signed by Hon. City Mayor.', t3);
+    insertHist.run('h-7', docId, 'routed', '4. Office of the Mayor Final Approval', '4. Office of the Mayor Final Approval', 'Office of the Mayor', 'City Treasurer', 'For Assessment & Payment Processing', "Hon. Mayor's Executive Staff", 'Transmitted to City Treasurer for check preparation and issuance.', t3);
+    insertHist.run('h-8', docId, 'stage_changed', '4. Office of the Mayor Final Approval', '5. Check Issued and Released to Payee', 'City Treasurer', 'City Treasurer', 'For Release to Constituent / Client', 'City Treasurer', 'Landbank Check # 00892348 released to contractor representative. Official Receipt # 78394 issued.', t4);
   }
+}
+
+export function resetDatabase(): void {
+  const db = getDb();
+  db.exec(`
+    DELETE FROM document_history;
+    DELETE FROM documents;
+    DELETE FROM templates;
+    DELETE FROM system_dropdowns;
+    DELETE FROM users;
+  `);
+  seedDefaultData(db);
 }
 
 // User methods
@@ -746,10 +382,14 @@ export function verifyUserPin(userId: string, pin: string): Omit<User, 'pin_hash
 }
 
 export function createUser(name: string, role: string, department: string, pin: string): Omit<User, 'pin_hash'> {
+  const cleanPin = pin.trim();
+  if (!/^\d{4}$/.test(cleanPin)) {
+    throw new Error('PIN must consist of exactly 4 numeric digits.');
+  }
   const db = getDb();
   const id = `u-${Date.now()}`;
   const now = new Date().toISOString();
-  const pinHash = hashPin(pin);
+  const pinHash = hashPin(cleanPin);
 
   db.prepare(`
     INSERT INTO users (id, name, role, department, pin_hash, created_at)
@@ -770,9 +410,14 @@ export function updateUser(
   const name = updates.name?.trim() || existing.name;
   const role = updates.role?.trim() || existing.role;
   const department = updates.department?.trim() || existing.department;
-  const pinHash = updates.pin && updates.pin.trim().length === 4
-    ? hashPin(updates.pin.trim())
-    : existing.pin_hash;
+  let pinHash = existing.pin_hash;
+  if (updates.pin) {
+    const cleanPin = updates.pin.trim();
+    if (!/^\d{4}$/.test(cleanPin)) {
+      throw new Error('Updated PIN must consist of exactly 4 numeric digits.');
+    }
+    pinHash = hashPin(cleanPin);
+  }
 
   db.prepare(`
     UPDATE users

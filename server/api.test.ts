@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import {
-  getDb,
   listUsers,
   verifyUserPin,
   createUser,
@@ -21,13 +20,14 @@ import {
   getAllDropdowns,
   getDropdownOptions,
   updateDropdown,
-  resetDropdown
+  resetDropdown,
+  resetDatabase
 } from './db.js';
 
 describe('DocTrack LGU - Document Tracking & Routing System Test Suite', () => {
   beforeAll(() => {
-    // Ensure DB is initialized with migrations and seeds
-    getDb();
+    // Reset database to guarantee fresh migrations and single process seed
+    resetDatabase();
   });
 
   describe('Phase 1: Municipal Accounts, Roles & PIN Authentication', () => {
@@ -101,23 +101,17 @@ describe('DocTrack LGU - Document Tracking & Routing System Test Suite', () => {
   describe('Phase 2: LGU Templates & Schema Customization', () => {
     it('should have seeded standard local government document templates', () => {
       const templates = listTemplates();
-      expect(templates.length).toBeGreaterThanOrEqual(3);
-
-      const ordinanceTpl = templates.find((t) => t.id === 'tpl-ordinance');
-      expect(ordinanceTpl).toBeDefined();
-      const ordStages = JSON.parse(ordinanceTpl!.stages_json);
-      const ordFields = JSON.parse(ordinanceTpl!.fields_json);
-
-      expect(ordStages).toContain('1. First Reading (Referred to Committee)');
-      expect(ordStages).toContain('6. Enacted & Published');
-      expect(ordFields.some((f: any) => f.id === 'ordinance_no')).toBe(true);
-      expect(ordFields.some((f: any) => f.id === 'committee')).toBe(true);
+      expect(templates.length).toBeGreaterThanOrEqual(1);
 
       const dvTpl = templates.find((t) => t.id === 'tpl-dv');
       expect(dvTpl).toBeDefined();
       const dvStages = JSON.parse(dvTpl!.stages_json);
+      const dvFields = JSON.parse(dvTpl!.fields_json);
+
       expect(dvStages).toContain('1. Obligation Request (CAFOA)');
-      expect(dvStages).toContain('6. Check Prepared & Released');
+      expect(dvStages).toContain('5. Check Issued and Released to Payee');
+      expect(dvFields.some((f: any) => f.id === 'payee_name')).toBe(true);
+      expect(dvFields.some((f: any) => f.id === 'amount')).toBe(true);
     });
 
     it('should allow creating custom municipal templates', () => {
@@ -144,40 +138,40 @@ describe('DocTrack LGU - Document Tracking & Routing System Test Suite', () => {
 
     it('should create a document with LGU routing metadata', () => {
       const doc = createDocument({
-        title: 'Ordinance: Standardizing Barangay Disaster Resiliency Plans',
-        template_id: 'tpl-ordinance',
+        title: 'Disbursement Voucher: Emergency Medical Supplies Procurement',
+        template_id: 'tpl-dv',
         priority: 'High',
         origin_type: 'Internal Department',
-        originating_office: 'Sangguniang Bayan / Panlungsod',
-        current_office: 'Sangguniang Bayan / Panlungsod',
-        action_required: 'For Committee Hearing & Deliberation',
-        author_name: 'Sanggunian Secretary',
+        originating_office: 'City Accounting Office',
+        current_office: 'City Accounting Office',
+        action_required: 'For Fund Certification & Budget Allocation',
+        author_name: 'City Accountant',
         custom_values: {
-          ordinance_no: 'ORD-2026-088',
-          proponent: 'Hon. Councilor Mateo Cruz',
-          committee: 'Committee on Laws, Rules & Internal Ethics',
-          session_date: '2026-10-22',
-          purpose_summary: 'Mandates annual disaster drill protocols across all 24 barangays.'
+          payee_name: 'MedTech Supplies Inc.',
+          amount: 250000,
+          fund_source: 'General Fund (GF)',
+          dv_no: 'DV-2026-10-0992',
+          particulars: 'Emergency medical response consumables.'
         },
-        notes: 'Submitted for calendar of business.'
+        notes: 'Submitted for CAFOA certification.'
       });
 
       expect(doc).toBeDefined();
       expect(doc.tracking_code).toMatch(/^(LGU|TRK)-\d{4}-\d{4}$/);
       expect(doc.origin_type).toBe('Internal Department');
-      expect(doc.originating_office).toBe('Sangguniang Bayan / Panlungsod');
-      expect(doc.current_office).toBe('Sangguniang Bayan / Panlungsod');
-      expect(doc.action_required).toBe('For Committee Hearing & Deliberation');
+      expect(doc.originating_office).toBe('City Accounting Office');
+      expect(doc.current_office).toBe('City Accounting Office');
+      expect(doc.action_required).toBe('For Fund Certification & Budget Allocation');
       testDocId = doc.id;
 
       const history = getDocumentHistory(testDocId);
       expect(history.length).toBe(1);
       expect(history[0].action).toBe('created');
-      expect(history[0].author_name).toBe('Sanggunian Secretary');
+      expect(history[0].author_name).toBe('City Accountant');
     });
 
     it('should filter documents by current holding office queue', () => {
-      const filtered = listDocuments({ current_office: 'Sangguniang Bayan / Panlungsod' });
+      const filtered = listDocuments({ current_office: 'City Accounting Office' });
       expect(filtered.some((d) => d.id === testDocId)).toBe(true);
 
       const otherOfficeDocs = listDocuments({ current_office: 'City Health Office' });
@@ -187,17 +181,17 @@ describe('DocTrack LGU - Document Tracking & Routing System Test Suite', () => {
     it('should advance workflow stage and record audit log', () => {
       const updated = advanceDocumentStage(
         testDocId,
-        '2. Committee Hearing & Report',
-        'Sanggunian Secretary',
-        'Hearing conducted with MDRRMO head and ABC President.'
+        '2. City Accounting Pre-Audit',
+        'City Accountant',
+        'Pre-audit examination completed with CAFOA certified.'
       );
 
-      expect(updated.current_stage).toBe('2. Committee Hearing & Report');
+      expect(updated.current_stage).toBe('2. City Accounting Pre-Audit');
 
       const history = getDocumentHistory(testDocId);
       expect(history.length).toBe(2);
       expect(history[0].action).toBe('stage_changed');
-      expect(history[0].to_stage).toBe('2. Committee Hearing & Report');
+      expect(history[0].to_stage).toBe('2. City Accounting Pre-Audit');
     });
 
     it('should route document to another municipal office with custodial handover', () => {
@@ -205,8 +199,8 @@ describe('DocTrack LGU - Document Tracking & Routing System Test Suite', () => {
         testDocId,
         'Office of the Mayor',
         "For Mayor's Signature / Approval",
-        'Sanggunian Secretary',
-        'Passed on 3rd reading. Transmitted to Mayor for executive signature.'
+        'City Accountant',
+        'Transmitted to Mayor for executive signature.'
       );
 
       expect(routed.current_office).toBe('Office of the Mayor');
@@ -215,7 +209,7 @@ describe('DocTrack LGU - Document Tracking & Routing System Test Suite', () => {
       const history = getDocumentHistory(testDocId);
       expect(history.length).toBe(3);
       expect(history[0].action).toBe('routed');
-      expect(history[0].from_office).toBe('Sangguniang Bayan / Panlungsod');
+      expect(history[0].from_office).toBe('City Accounting Office');
       expect(history[0].to_office).toBe('Office of the Mayor');
       expect(history[0].action_required).toBe("For Mayor's Signature / Approval");
       expect(history[0].notes).toContain('executive signature');
@@ -289,6 +283,20 @@ describe('DocTrack LGU - Document Tracking & Routing System Test Suite', () => {
       const reset = resetDropdown('offices');
       expect(reset.options).toContain('Office of the Mayor');
       expect(reset.options.length).toBeGreaterThanOrEqual(10);
+    });
+  });
+
+  describe('Phase 5: Security & Input Validation Hardening', () => {
+    it('should reject non-numeric or non-4-digit PINs during user creation', () => {
+      expect(() => createUser('Invalid User 1', 'Officer', 'Health', '123')).toThrow('exactly 4 numeric digits');
+      expect(() => createUser('Invalid User 2', 'Officer', 'Health', '12345')).toThrow('exactly 4 numeric digits');
+      expect(() => createUser('Invalid User 3', 'Officer', 'Health', 'abcd')).toThrow('exactly 4 numeric digits');
+    });
+
+    it('should reject non-numeric PINs during user update', () => {
+      const u = createUser('Test Pin Officer', 'Officer', 'Health', '9999');
+      expect(() => updateUser(u.id, { pin: 'xyz1' })).toThrow('exactly 4 numeric digits');
+      deleteUser(u.id);
     });
   });
 });

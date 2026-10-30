@@ -11,8 +11,6 @@
     "build": "npm run build:client",
     "build:win": "npm run build && C:\\Windows\\Microsoft.NET\\Framework64\\v4.0.30319\\csc.exe /target:winexe /out:DocTrack-LGU.exe windows-launcher\\Program.cs",
     "package": "powershell -ExecutionPolicy Bypass -File .\\scripts\\package-release.ps1",
-    "installer": "powershell -ExecutionPolicy Bypass -File .\\scripts\\package-release.ps1",
-    "release": "powershell -ExecutionPolicy Bypass -File .\\scripts\\package-release.ps1",
     "start:app": "start DocTrack-LGU.exe",
     "shortcut": "powershell -ExecutionPolicy Bypass -File .\\create-desktop-shortcut.ps1",
     "start": "tsx server/index.ts",

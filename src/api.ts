@@ -167,16 +167,8 @@ export const api = {
     current_office?: string;
     origin_type?: string;
   }): Promise<DocumentRecord[]> {
-    const query = new URLSearchParams();
-    if (params?.template_id) query.set('template_id', params.template_id);
-    if (params?.stage) query.set('stage', params.stage);
-    if (params?.priority) query.set('priority', params.priority);
-    if (params?.search) query.set('search', params.search);
-    if (params?.assignee_id) query.set('assignee_id', params.assignee_id);
-    if (params?.current_office) query.set('current_office', params.current_office);
-    if (params?.origin_type) query.set('origin_type', params.origin_type);
-
-    const qs = query.toString();
+    const clean = Object.entries(params || {}).filter(([_, v]) => v != null && v !== '');
+    const qs = new URLSearchParams(clean as [string, string][]).toString();
     return request<DocumentRecord[]>(`/documents${qs ? `?${qs}` : ''}`);
   },
 
