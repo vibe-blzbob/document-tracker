@@ -7,13 +7,15 @@ interface NetworkBannerProps {
   currentUser: UserType | null;
   onOpenQR: () => void;
   onOpenAuth: () => void;
+  onSignOut?: () => void;
 }
 
 export const NetworkBanner: React.FC<NetworkBannerProps> = ({
   networkInfo,
   currentUser,
   onOpenQR,
-  onOpenAuth
+  onOpenAuth,
+  onSignOut
 }) => {
   const [showUrl, setShowUrl] = useState(false);
   const isLocalOnly = networkInfo?.isLocalOnly || !networkInfo?.lanUrl;
@@ -90,6 +92,16 @@ export const NetworkBanner: React.FC<NetworkBannerProps> = ({
             >
               Switch Staff
             </button>
+            {onSignOut && (
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={onSignOut}
+                style={{ padding: '0.2rem 0.5rem', fontSize: '0.7rem', color: '#f87171' }}
+                title="Sign out of staff account"
+              >
+                Sign Out
+              </button>
+            )}
           </div>
         ) : (
           <button

@@ -171,6 +171,24 @@ export const DocumentDetail: React.FC<DocumentDetailProps> = ({
     });
   };
 
+  const formatDateOnly = (iso: string) => {
+    const d = new Date(iso);
+    return d.toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    });
+  };
+
+  const formatTimeOnly = (iso: string) => {
+    const d = new Date(iso);
+    return d.toLocaleTimeString(undefined, {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
+  };
+
   const formatFileSize = (bytes: number): string => {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -522,13 +540,20 @@ export const DocumentDetail: React.FC<DocumentDetailProps> = ({
         </div>
       </div>
 
-      {/* Audit History & Timeline Card */}
-      <div className="card" style={{ padding: '1.5rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.75rem' }}>
+      {/* Document Logs: Audit History & Chain of Custody Table */}
+      <div className="card" style={{ padding: '0', overflow: 'hidden' }}>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '1.25rem 1.5rem',
+          borderBottom: '1px solid var(--border-subtle)',
+          background: 'rgba(17, 24, 39, 0.4)'
+        }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
             <History size={18} color="#818cf8" />
             <h3 style={{ fontSize: '1rem', fontWeight: 600, color: '#f8fafc' }}>
-              Audit History & Chain of Custody
+              Document Logs & Chain of Custody
             </h3>
           </div>
           <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>
@@ -536,144 +561,176 @@ export const DocumentDetail: React.FC<DocumentDetailProps> = ({
           </span>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', position: 'relative' }}>
-          {history.map((entry, idx) => (
-            <div
-              key={entry.id}
-              style={{
-                display: 'flex',
-                gap: '1rem',
-                position: 'relative',
-                paddingBottom: idx !== history.length - 1 ? '0.75rem' : '0'
-              }}
-            >
-              {/* Timeline marker */}
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                <div style={{
-                  width: '28px',
-                  height: '28px',
-                  borderRadius: '50%',
-                  background: entry.action === 'created'
-                    ? 'rgba(99, 102, 241, 0.2)'
-                    : entry.action === 'routed'
-                    ? 'rgba(79, 70, 229, 0.25)'
-                    : entry.action === 'stage_changed'
-                    ? 'rgba(16, 185, 129, 0.2)'
-                    : 'rgba(55, 65, 81, 0.5)',
-                  color: entry.action === 'created'
-                    ? '#818cf8'
-                    : entry.action === 'routed'
-                    ? '#a5b4fc'
-                    : entry.action === 'stage_changed'
-                    ? '#34d399'
-                    : '#9ca3af',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  border: '1px solid var(--border-medium)',
-                  flexShrink: 0
-                }}>
-                  {entry.action === 'routed' ? (
-                    <Send size={13} />
-                  ) : entry.action === 'stage_changed' ? (
-                    <Check size={14} />
-                  ) : (
-                    <CheckCircle2 size={14} />
-                  )}
-                </div>
-                {idx !== history.length - 1 && (
-                  <div style={{ width: '2px', background: 'var(--border-subtle)', flex: 1, marginTop: '4px' }} />
-                )}
-              </div>
-
-              {/* Event Content */}
-              <div style={{
-                flex: 1,
-                background: 'var(--bg-surface-elevated)',
-                border: '1px solid var(--border-subtle)',
-                borderRadius: '8px',
-                padding: '0.85rem 1rem'
+        <div style={{ overflowX: 'auto', width: '100%' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.8125rem' }}>
+            <thead>
+              <tr style={{
+                background: 'rgba(17, 24, 39, 0.7)',
+                borderBottom: '1px solid var(--border-medium)',
+                color: 'var(--text-muted)',
+                fontSize: '0.75rem',
+                textTransform: 'uppercase',
+                letterSpacing: '0.04em'
               }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.35rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: '0.875rem', fontWeight: 600, color: '#f8fafc' }}>
+                <th style={{ padding: '0.75rem 1rem', width: '150px' }}>Date & Time</th>
+                <th style={{ padding: '0.75rem 1rem', width: '140px' }}>Action</th>
+                <th style={{ padding: '0.75rem 1rem', minWidth: '180px' }}>Custody & Routing</th>
+                <th style={{ padding: '0.75rem 1rem', minWidth: '220px' }}>Action & Remarks</th>
+                <th style={{ padding: '0.75rem 1rem', width: '150px' }}>Authorized By</th>
+                {currentUser?.role === 'Admin' && (
+                  <th style={{ padding: '0.75rem 1rem', width: '48px', textAlign: 'center' }}></th>
+                )}
+              </tr>
+            </thead>
+            <tbody>
+              {history.length === 0 ? (
+                <tr>
+                  <td colSpan={currentUser?.role === 'Admin' ? 6 : 5} style={{ padding: '2.5rem 1rem', textAlign: 'center', color: '#9ca3af' }}>
+                    No audit log entries recorded for this document yet.
+                  </td>
+                </tr>
+              ) : (
+                history.map((entry, idx) => (
+                  <tr
+                    key={entry.id || idx}
+                    style={{
+                      borderBottom: '1px solid var(--border-subtle)',
+                      background: idx % 2 === 0 ? 'transparent' : 'rgba(255, 255, 255, 0.015)',
+                      verticalAlign: 'top'
+                    }}
+                  >
+                    {/* Timestamp */}
+                    <td style={{ padding: '0.85rem 1rem', whiteSpace: 'nowrap' }}>
+                      <div style={{ fontWeight: 600, color: '#f8fafc', fontSize: '0.8125rem' }}>
+                        {formatDateOnly(entry.created_at)}
+                      </div>
+                      <div className="font-mono" style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '0.15rem' }}>
+                        {formatTimeOnly(entry.created_at)}
+                      </div>
+                    </td>
+
+                    {/* Action Badge */}
+                    <td style={{ padding: '0.85rem 1rem', whiteSpace: 'nowrap' }}>
                       {entry.action === 'created' ? (
-                        'Document Ingested into Registry'
+                        <span className="badge" style={{ background: 'rgba(99, 102, 241, 0.15)', color: '#818cf8', border: '1px solid rgba(99, 102, 241, 0.3)' }}>
+                          <CheckCircle2 size={12} /> Ingested
+                        </span>
                       ) : entry.action === 'routed' ? (
-                        <span>
-                          Custody Forwarded: <strong style={{ color: '#a5b4fc' }}>{entry.from_office || 'Origin'}</strong> ➔ <strong style={{ color: '#818cf8' }}>{entry.to_office || 'Destination'}</strong>
+                        <span className="badge" style={{ background: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.3)' }}>
+                          <Send size={12} /> Forwarded
                         </span>
                       ) : entry.action === 'stage_changed' ? (
-                        <span>Stage Advanced: <strong style={{ color: '#34d399' }}>{entry.to_stage}</strong></span>
+                        <span className="badge" style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#34d399', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
+                          <Check size={12} /> Advanced
+                        </span>
                       ) : (
-                        'Details Modified'
+                        <span className="badge" style={{ background: 'rgba(107, 114, 128, 0.15)', color: '#9ca3af', border: '1px solid rgba(107, 114, 128, 0.3)' }}>
+                          <Edit3 size={12} /> Modified
+                        </span>
                       )}
-                    </span>
-                    {entry.action_required && entry.action === 'routed' && (
-                      <span style={{
-                        fontSize: '0.7rem',
-                        fontWeight: 600,
-                        padding: '0.15rem 0.45rem',
-                        borderRadius: '4px',
-                        background: 'rgba(245, 158, 11, 0.15)',
-                        color: '#fbbf24',
-                        border: '1px solid rgba(245, 158, 11, 0.3)'
-                      }}>
-                        ⚡ {entry.action_required}
-                      </span>
-                    )}
-                    {entry.from_stage && entry.action === 'stage_changed' && (
-                      <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>
-                        (from {entry.from_stage})
-                      </span>
-                    )}
-                  </div>
+                    </td>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <span style={{ fontSize: '0.75rem', color: '#6b7280' }}>
-                      {formatDate(entry.created_at)}
-                    </span>
+                    {/* Routing / Office Custody */}
+                    <td style={{ padding: '0.85rem 1rem' }}>
+                      {entry.action === 'routed' ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap' }}>
+                          <span style={{ fontWeight: 600, color: '#e2e8f0' }}>
+                            {entry.from_office || 'Origin'}
+                          </span>
+                          <span style={{ color: '#818cf8', fontWeight: 700 }}>➔</span>
+                          <span style={{ fontWeight: 600, color: '#818cf8' }}>
+                            {entry.to_office || 'Destination'}
+                          </span>
+                        </div>
+                      ) : entry.action === 'stage_changed' ? (
+                        <div>
+                          <span style={{ fontWeight: 600, color: '#34d399' }}>{entry.to_stage}</span>
+                          {entry.from_stage && (
+                            <span style={{ fontSize: '0.75rem', color: '#9ca3af', marginLeft: '0.35rem' }}>
+                              (from {entry.from_stage})
+                            </span>
+                          )}
+                        </div>
+                      ) : entry.action === 'created' ? (
+                        <span style={{ color: '#e2e8f0', fontWeight: 500 }}>
+                          Received at {entry.to_office || doc.originating_office}
+                        </span>
+                      ) : (
+                        <span style={{ color: '#9ca3af' }}>Record Details Updated</span>
+                      )}
+                    </td>
+
+                    {/* Action Required & Remarks */}
+                    <td style={{ padding: '0.85rem 1rem' }}>
+                      {entry.action_required && (
+                        <div style={{ marginBottom: entry.notes ? '0.35rem' : '0' }}>
+                          <span style={{
+                            fontSize: '0.7rem',
+                            fontWeight: 600,
+                            padding: '0.15rem 0.45rem',
+                            borderRadius: '4px',
+                            background: 'rgba(245, 158, 11, 0.15)',
+                            color: '#fbbf24',
+                            border: '1px solid rgba(245, 158, 11, 0.3)',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.25rem'
+                          }}>
+                            ⚡ {entry.action_required}
+                          </span>
+                        </div>
+                      )}
+                      {entry.notes ? (
+                        <div style={{
+                          color: '#d1d5db',
+                          fontSize: '0.8125rem',
+                          fontStyle: 'italic',
+                          lineHeight: '1.4'
+                        }}>
+                          "{entry.notes}"
+                        </div>
+                      ) : !entry.action_required ? (
+                        <span style={{ color: '#6b7280' }}>—</span>
+                      ) : null}
+                    </td>
+
+                    {/* Authorized By */}
+                    <td style={{ padding: '0.85rem 1rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#f8fafc', fontWeight: 500 }}>
+                        <UserIcon size={14} color="#818cf8" style={{ flexShrink: 0 }} />
+                        <span>{entry.author_name}</span>
+                      </div>
+                    </td>
+
+                    {/* Admin Delete Action */}
                     {currentUser?.role === 'Admin' && (
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteHistoryEntry(entry.id)}
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          color: '#ef4444',
-                          cursor: 'pointer',
-                          padding: '0.15rem',
-                          display: 'flex',
-                          opacity: 0.8
-                        }}
-                        title="Admin: Delete this registry log entry"
-                      >
-                        <Trash2 size={13} />
-                      </button>
+                      <td style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteHistoryEntry(entry.id)}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: '#ef4444',
+                            cursor: 'pointer',
+                            padding: '0.25rem',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            borderRadius: '4px',
+                            opacity: 0.8
+                          }}
+                          title="Admin: Delete this registry log entry"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </td>
                     )}
-                  </div>
-                </div>
-
-                <div style={{ fontSize: '0.8125rem', color: '#9ca3af', marginBottom: entry.notes ? '0.4rem' : '0' }}>
-                  Authorized by: <strong style={{ color: '#f8fafc' }}>{entry.author_name}</strong>
-                </div>
-
-                {entry.notes && (
-                  <div style={{
-                    fontSize: '0.8125rem',
-                    color: '#d1d5db',
-                    background: 'rgba(17, 24, 39, 0.4)',
-                    padding: '0.5rem 0.75rem',
-                    borderRadius: '6px',
-                    borderLeft: '3px solid var(--primary)',
-                    fontStyle: 'italic'
-                  }}>
-                    "{entry.notes}"
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 

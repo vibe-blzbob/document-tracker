@@ -270,14 +270,14 @@ export const DocumentList: React.FC<DocumentListProps> = ({
                       fontSize: '0.875rem',
                       fontWeight: 600,
                       color: '#f8fafc',
-                      textOverflow: 'ellipsis',
-                      overflow: 'hidden',
-                      whiteSpace: 'nowrap',
                       display: 'flex',
                       alignItems: 'center',
-                      gap: '0.4rem'
+                      gap: '0.4rem',
+                      minWidth: 0
                     }}>
-                      <span>{doc.title}</span>
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }} title={doc.title}>
+                        {doc.title}
+                      </span>
                       {doc.attachment_path && (
                         <span title="Contains local attachment" style={{ display: 'inline-flex', flexShrink: 0 }}>
                           <Paperclip size={13} color="#34d399" />
@@ -288,10 +288,11 @@ export const DocumentList: React.FC<DocumentListProps> = ({
                       display: 'flex',
                       alignItems: 'center',
                       gap: '0.45rem',
-                      flexWrap: 'wrap',
-                      marginTop: '0.2rem'
+                      marginTop: '0.2rem',
+                      overflow: 'hidden',
+                      whiteSpace: 'nowrap'
                     }}>
-                      <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>
+                      <span style={{ fontSize: '0.75rem', color: '#9ca3af', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 1 }}>
                         {tpl?.name || 'Custom Document'}
                       </span>
                       <span style={{
@@ -302,7 +303,8 @@ export const DocumentList: React.FC<DocumentListProps> = ({
                         color: '#93c5fd',
                         background: 'rgba(59, 130, 246, 0.12)',
                         padding: '0.05rem 0.4rem',
-                        borderRadius: '4px'
+                        borderRadius: '4px',
+                        flexShrink: 0
                       }}>
                         <Building size={10} /> {doc.current_office || 'Records'}
                       </span>
@@ -312,7 +314,12 @@ export const DocumentList: React.FC<DocumentListProps> = ({
                           color: '#fbbf24',
                           background: 'rgba(245, 158, 11, 0.12)',
                           padding: '0.05rem 0.35rem',
-                          borderRadius: '4px'
+                          borderRadius: '4px',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          maxWidth: '160px',
+                          flexShrink: 1
                         }}>
                           ⚡ {doc.action_required}
                         </span>
@@ -322,7 +329,17 @@ export const DocumentList: React.FC<DocumentListProps> = ({
 
                   {/* Desktop Stage */}
                   <div className="doc-desktop-stage">
-                    <span className="badge doc-badge-stage">
+                    <span
+                      className="badge doc-badge-stage"
+                      style={{
+                        maxWidth: '100%',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        display: 'inline-block'
+                      }}
+                      title={doc.current_stage}
+                    >
                       {doc.current_stage}
                     </span>
                   </div>
@@ -332,6 +349,16 @@ export const DocumentList: React.FC<DocumentListProps> = ({
                     <span className={`badge badge-priority-${doc.priority.toLowerCase()}`}>
                       {doc.priority}
                     </span>
+                  </div>
+
+                  {/* Desktop Custodian */}
+                  <div className="doc-desktop-custodian">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.8125rem', color: '#d1d5db', minWidth: 0 }}>
+                      <User size={13} color="#9ca3af" style={{ flexShrink: 0 }} />
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }} title={doc.assignee_name || 'Unassigned'}>
+                        {doc.assignee_name || 'Unassigned'}
+                      </span>
+                    </div>
                   </div>
 
                   {/* Custodian & Timestamp (Adaptive) */}
@@ -349,8 +376,8 @@ export const DocumentList: React.FC<DocumentListProps> = ({
 
                   {/* Desktop Updated Column */}
                   <div className="doc-desktop-updated">
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.75rem', color: '#9ca3af' }}>
-                      <Clock size={12} />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.75rem', color: '#9ca3af', whiteSpace: 'nowrap' }}>
+                      <Clock size={12} style={{ flexShrink: 0 }} />
                       <span>{formatDate(doc.updated_at)}</span>
                     </div>
                   </div>

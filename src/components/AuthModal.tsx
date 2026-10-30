@@ -6,10 +6,11 @@ import { api } from '../api';
 interface AuthModalProps {
   currentUser: User | null;
   onSelectUser: (user: User) => void;
-  onClose: () => void;
+  onClose?: () => void;
+  isStandalone?: boolean;
 }
 
-export const AuthModal: React.FC<AuthModalProps> = ({ currentUser, onSelectUser, onClose }) => {
+export const AuthModal: React.FC<AuthModalProps> = ({ currentUser, onSelectUser, onClose, isStandalone }) => {
   const [users, setUsers] = useState<User[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<string>('');
   const [pin, setPin] = useState<string>('');
@@ -32,12 +33,31 @@ export const AuthModal: React.FC<AuthModalProps> = ({ currentUser, onSelectUser,
       const list = await api.listUsers();
       setUsers(list);
       if (list.length > 0 && !selectedUserId) {
-        setSelectedUserId(currentUser?.id || list[0].id);
+        const savedId = localStorage.getItem('lan_tracker_user_id');
+        const match = list.find((u) => u.id === savedId);
+        setSelectedUserId(currentUser?.id || (match ? match.id : list[0].id));
       }
     } catch (err: any) {
       setError(err.message);
     }
   };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (tab !== 'login') return;
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'SELECT' || target.tagName === 'TEXTAREA')) {
+        return;
+      }
+      if (e.key >= '0' && e.key <= '9') {
+        handleKeyPress(e.key);
+      } else if (e.key === 'Backspace') {
+        handleBackspace();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [pin, tab, selectedUserId, loading]);
 
   const handleKeyPress = (num: string) => {
     if (pin.length < 4) {
@@ -60,7 +80,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ currentUser, onSelectUser,
       const res = await api.login(userId, pinCode);
       if (res.success && res.user) {
         onSelectUser(res.user);
-        onClose();
+        if (onClose) onClose();
       }
     } catch (err: any) {
       setError(err.message || 'Incorrect PIN code');
@@ -89,7 +109,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ currentUser, onSelectUser,
         currentUser?.id
       );
       onSelectUser(created);
-      onClose();
+      if (onClose) onClose();
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -99,36 +119,37 @@ export const AuthModal: React.FC<AuthModalProps> = ({ currentUser, onSelectUser,
 
   const selectedUser = users.find((u) => u.id === selectedUserId);
 
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" style={{ maxWidth: '440px' }} onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-            <div style={{
-              width: '32px',
-              height: '32px',
-              borderRadius: '8px',
-              background: 'rgba(99, 102, 241, 0.15)',
-              color: '#818cf8',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}>
-              <ShieldCheck size={18} />
-            </div>
-            <div>
-              <h3 style={{ fontSize: '1rem', fontWeight: 600, color: '#f8fafc' }}>
-                Team Sign-In & Authorization
-              </h3>
-              <p style={{ fontSize: '0.75rem', color: '#9ca3af' }}>
-                Sign off on stage changes and audit stamps
-              </p>
-            </div>
+  const cardContent = (
+    <div className="modal-content" style={{ maxWidth: '440px', width: '100%' }} onClick={(e) => e.stopPropagation()}>
+      <div className="modal-header">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+          <div style={{
+            width: '32px',
+            height: '32px',
+            borderRadius: '8px',
+            background: 'rgba(99, 102, 241, 0.15)',
+            color: '#818cf8',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}>
+            <ShieldCheck size={18} />
           </div>
+          <div>
+            <h3 style={{ fontSize: '1rem', fontWeight: 600, color: '#f8fafc' }}>
+              {isStandalone ? 'Staff Sign-In' : 'Team Sign-In & Authorization'}
+            </h3>
+            <p style={{ fontSize: '0.75rem', color: '#9ca3af' }}>
+              {isStandalone ? 'Enter 4-digit PIN to access system' : 'Sign off on stage changes and audit stamps'}
+            </p>
+          </div>
+        </div>
+        {!isStandalone && onClose && (
           <button className="btn btn-secondary btn-sm" onClick={onClose} style={{ padding: '0.35rem' }}>
             <X size={16} />
           </button>
-        </div>
+        )}
+      </div>
 
         {/* Tab switcher */}
         <div style={{
@@ -396,6 +417,49 @@ export const AuthModal: React.FC<AuthModalProps> = ({ currentUser, onSelectUser,
           )}
         </div>
       </div>
+  );
+
+  if (isStandalone) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '1.5rem',
+        background: 'radial-gradient(circle at 50% 25%, rgba(99, 102, 241, 0.12) 0%, transparent 65%), var(--bg-main)'
+      }}>
+        <div style={{ textAlign: 'center', marginBottom: '1.75rem' }}>
+          <div style={{
+            width: '48px',
+            height: '48px',
+            borderRadius: '12px',
+            background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
+            color: '#ffffff',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: '0 4px 16px rgba(99, 102, 241, 0.4)',
+            marginBottom: '0.75rem'
+          }}>
+            <ShieldCheck size={28} />
+          </div>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#f8fafc', letterSpacing: '-0.02em', margin: 0 }}>
+            DocTrack <span style={{ fontSize: '0.75rem', padding: '0.15rem 0.5rem', borderRadius: '4px', background: 'rgba(99, 102, 241, 0.2)', color: '#818cf8', fontWeight: 700, verticalAlign: 'middle' }}>LGU</span>
+          </h1>
+          <p style={{ fontSize: '0.8125rem', color: '#9ca3af', margin: '0.35rem 0 0 0' }}>
+            Document Tracking & Custodial Routing Information System
+          </p>
+        </div>
+        {cardContent}
+      </div>
+    );
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      {cardContent}
     </div>
   );
 };

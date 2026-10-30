@@ -69,19 +69,17 @@ export const App: React.FC = () => {
       if (officeData?.offices?.length) setOffices(officeData.offices);
       if (officeData?.actions?.length) setActions(officeData.actions);
 
-      // Restore user or default to Admin
-      const savedUserId = localStorage.getItem('lan_tracker_user_id');
-      const found = userList.find((u) => u.id === savedUserId);
-      if (found) {
-        setCurrentUser(found);
-      } else if (userList.length > 0) {
-        setCurrentUser(userList[0]);
-      }
+      // Standalone login required: do not auto-login on startup
     } catch (err) {
       console.error('Initialization error:', err);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSignOut = () => {
+    setCurrentUser(null);
+    localStorage.removeItem('lan_tracker_user_id');
   };
 
   const refreshDropdowns = async () => {
@@ -128,6 +126,32 @@ export const App: React.FC = () => {
     }
   };
 
+  if (loading) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        color: '#9ca3af',
+        background: 'var(--bg-main)',
+        fontSize: '0.9rem'
+      }}>
+        Connecting to Local Document Database...
+      </div>
+    );
+  }
+
+  if (!currentUser) {
+    return (
+      <AuthModal
+        isStandalone={true}
+        currentUser={null}
+        onSelectUser={handleUserSelected}
+      />
+    );
+  }
+
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       {/* Network & Staff Status Bar */}
@@ -136,6 +160,7 @@ export const App: React.FC = () => {
         currentUser={currentUser}
         onOpenQR={() => setShowQRModal(true)}
         onOpenAuth={() => setShowAuthModal(true)}
+        onSignOut={handleSignOut}
       />
 
       {/* Main Glassmorphism Header */}

@@ -279,7 +279,7 @@ export const RoutingSlipModal: React.FC<RoutingSlipModalProps> = ({
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.725rem' }}>
               <thead>
                 <tr style={{ background: '#f8fafc', borderBottom: '1px solid #cbd5e1', textAlign: 'left' }}>
-                  <th style={{ padding: '0.4rem 0.5rem', width: '90px' }}>Date/Time</th>
+                  <th style={{ padding: '0.4rem 0.5rem', width: '120px' }}>Date/Time</th>
                   <th style={{ padding: '0.4rem 0.5rem', width: '130px' }}>From Office</th>
                   <th style={{ padding: '0.4rem 0.5rem', width: '130px' }}>To Office</th>
                   <th style={{ padding: '0.4rem 0.5rem' }}>Action / Notes</th>
