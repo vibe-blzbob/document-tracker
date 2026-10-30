@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build and distribution outputs
+dist/
+dist-server/
+release/
+*.tsbuildinfo
+
+# Database files & uploads (local storage / data)
+tracker.db*
+*.sqlite*
+uploads/
+*.log
+
+# Windows binary builds (distributables)
+*.exe
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Editor & OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
